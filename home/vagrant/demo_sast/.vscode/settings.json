@@ -1,0 +1,41 @@
+{
+  // ======================
+  // ESLint (JavaScript)
+  // ======================
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.validate": ["javascript", "javascriptreact"],
+  "eslint.alwaysShowStatus": true,
+  "eslint.run": "onType",
+  "editor.formatOnSave": true,
+
+  // ======================
+  // Bandit (Python)
+  // ======================
+  "emeraldwalk.runonsave": {
+    "commands": [
+      {
+        "match": "\\.py$",
+        "command": "clear && echo '🔍 Running Bandit...' && /home/vagrant/.local/bin/bandit -r ${fileDirname} -f txt -o ${workspaceFolder}/bandit_report.txt && echo '✅ Bandit done'",
+        "runIn": "terminal"
+      },
+      {
+        "match": "\\.py$",
+        "command": "echo '🔍 Running Semgrep...' && /home/vagrant/.local/bin/semgrep scan ${file} --config auto --json > ${workspaceFolder}/semgrep_last.json && echo '✅ Semgrep done'",
+        "runIn": "terminal"
+      }
+    ]
+  },
+
+  // ======================
+  // Semgrep (Multi-langage)
+  // ======================
+  "semgrep.path": "/home/vagrant/.local/bin/semgrep",
+  "semgrep.useLocalSemgrep": true,
+
+  // ======================
+  // SonarLint (JS/TS/Python)
+  // ======================
+  "sonarlint.pathToNodeExecutable": "/home/vagrant/.nvm/versions/node/v20.19.5/bin/node"
+}

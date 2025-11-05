@@ -1,0 +1,24 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        files: \.js$
+
+  - repo: https://github.com/returntocorp/semgrep
+    rev: v1.91.0
+    hooks:
+      - id: semgrep
+        args: ["--config", "auto"]
+        files: \.(py|js)$
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        exclude: |
+          ^node_modules/|
+          ^\.venv/|
+          ^env/|
+          ^__pycache__/|
+          \.lock$
