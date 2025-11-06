@@ -74,6 +74,19 @@ pipeline {
       }
     }
 
+    stage('Docker Scan - Image Security') {
+      steps {
+        echo '🔎 Scan de sécurité de l’image Docker...'
+        sh '''
+          # Liste des images Docker
+          docker image ls
+
+          # Scanne l'image locale "demo-sast" pour les vulnérabilités
+          trivy image ${APP_NAME} --exit-code 0 --format json --output trivy_image_report.json
+        '''
+      }
+    }
+
     stage('Deploy') {
       steps {
         echo "🚀 Déploiement du conteneur sur le port ${HOST_PORT}..."
@@ -91,13 +104,24 @@ pipeline {
         """
       }
     }
+
+    stage('DAST - OWASP ZAP Scan') {
+      steps {
+        echo '🧪 Scan dynamique de l’application (DAST)...'
+        sh '''
+          docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py \
+            -t http://localhost:${HOST_PORT} \
+            -r zap_report.html || true
+        '''
+      }
+    }
   }
 
   post {
     always {
       echo '📊 Fin du pipeline - génération/archivage des rapports.'
-      sh 'ls -lh *.json || true'
-      archiveArtifacts artifacts: '*.json', onlyIfSuccessful: false
+      sh 'ls -lh *.json zap_report.html || true'
+      archiveArtifacts artifacts: '*.json, zap_report.html', onlyIfSuccessful: false
     }
   }
 }
