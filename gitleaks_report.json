@@ -1,0 +1,22 @@
+[
+ {
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 8,
+  "EndLine": 8,
+  "StartColumn": 2,
+  "EndColumn": 29,
+  "Match": "API_KEY = \"1234567890abcdef\"",
+  "Secret": "1234567890abcdef",
+  "File": "semgrep_test.py",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 4,
+  "Author": "",
+  "Email": "",
+  "Date": "",
+  "Message": "",
+  "Tags": [],
+  "RuleID": "generic-api-key",
+  "Fingerprint": "semgrep_test.py:generic-api-key:8"
+ }
+]

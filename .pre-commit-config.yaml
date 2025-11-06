@@ -1,24 +1,40 @@
 repos:
+  # --- Linter JS ---
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: v8.56.0
     hooks:
       - id: eslint
+        name: ESLint JS Linter
         files: \.js$
+        args: ["--fix"]
 
+  # --- Analyse SAST Python/JS avec Semgrep ---
   - repo: https://github.com/returntocorp/semgrep
     rev: v1.91.0
     hooks:
       - id: semgrep
+        name: Semgrep Security Scan
         args: ["--config", "auto"]
         files: \.(py|js)$
 
+  # --- Détection de secrets avant commit ---
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.4.0
     hooks:
       - id: detect-secrets
+        name: Detect Secrets (Gitleaks alternative)
         exclude: |
-          ^node_modules/|
-          ^\.venv/|
-          ^env/|
-          ^__pycache__/|
+          ^node_modules/
+          ^.venv/
+          ^env/
+          ^__pycache__/
           \.lock$
+
+  # --- Scan des vulnérabilités avec Trivy ---
+  - repo: local
+    hooks:
+      - id: trivy-scan
+        name: Trivy Vulnerability Scan
+        entry: bash -c "trivy fs . --scanners vuln --exit-code 0 --format json --output trivy_report.json && echo '✅ Trivy scan complete'"
+        language: system
+        pass_filenames: false
