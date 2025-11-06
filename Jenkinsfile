@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     stages {
+
         stage('Build') {
             steps {
                 echo '🔨 Compilation du projet...'
@@ -48,13 +49,20 @@ pipeline {
         stage('Docker Build') {
             steps {
                 echo '🐳 Construction de l’image Docker...'
-                sh 'docker build -t demo-sast .'
+                sh '''
+                docker build -t demo-sast .
+                '''
             }
         }
 
         stage('Deploy') {
             steps {
-                echo '🚀 Déploiement terminé avec succès.'
+                echo '🚀 Déploiement du conteneur...'
+                sh '''
+                docker stop demo-sast || true
+                docker rm demo-sast || true
+                docker run -d --name demo-sast -p 8080:3000 demo-sast
+                '''
             }
         }
     }
@@ -62,6 +70,7 @@ pipeline {
     post {
         always {
             echo '📊 Fin du pipeline - génération des rapports.'
+            sh 'ls -lh *.json || true'
         }
     }
 }
