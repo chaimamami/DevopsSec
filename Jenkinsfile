@@ -32,7 +32,7 @@ pipeline {
             steps {
                 echo '📦 Analyse SCA avec Trivy...'
                 sh '''
-                trivy fs . --security-checks vuln --exit-code 0 --format json --output trivy_report.json
+                trivy fs . --scanners vuln --exit-code 0 --format json --output trivy_report.json
                 '''
             }
         }
@@ -59,8 +59,15 @@ pipeline {
             steps {
                 echo '🚀 Déploiement du conteneur...'
                 sh '''
+                # Libère le port 8080 s'il est déjà utilisé
+                docker ps -q --filter "publish=8080" | xargs -r docker stop
+                docker ps -q --filter "publish=8080" | xargs -r docker rm
+
+                # Supprime l’ancien conteneur s’il existe
                 docker stop demo-sast || true
                 docker rm demo-sast || true
+
+                # Lance la nouvelle version
                 docker run -d --name demo-sast -p 8080:3000 demo-sast
                 '''
             }
