@@ -3,8 +3,8 @@ pipeline {
 
   environment {
     APP_NAME = 'demo-sast'
-    HOST_PORT = '8081'          // change si nécessaire
-    APP_PORT  = '3000'          // port interne de l'app
+    HOST_PORT = '8081'          // Changez si nécessaire
+    APP_PORT  = '3000'          // Port interne de l'application
     SEMGREP_IMG = 'returntocorp/semgrep:latest'
     GITLEAKS_IMG = 'zricethezav/gitleaks:latest'
   }
@@ -109,7 +109,7 @@ pipeline {
       steps {
         echo '🧪 Scan dynamique de l’application (DAST)...'
         sh '''
-          docker run --rm -v $(pwd):/zap/wrk/:rw -t owasp/zap2docker-stable zap-baseline.py \
+          docker run --rm -v $(pwd):/zap/wrk/:rw -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
             -t http://localhost:${HOST_PORT} \
             -r zap_report.html || true
         '''
