@@ -37,9 +37,8 @@ pipeline {
             semgrep --config auto --json > semgrep_report.json || true
         '''
         script {
-          def scanResult = sh(script: 'docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} semgrep --config auto --json', returnStdout: true)
-          def jsonResponse = readJSON text: scanResult
-          def criticalVulns = jsonResponse.findAll { it.findings.any { it.severity == 'critical' } }
+          def scanResult = readJSON file: 'semgrep_report.json' // Lire correctement le fichier JSON
+          def criticalVulns = scanResult.findAll { it.findings.any { it.severity == 'critical' } }
           
           if (criticalVulns.size() > 0) {
             error "Des vulnérabilités critiques ont été détectées par Semgrep !"
@@ -53,7 +52,7 @@ pipeline {
         echo '📦 Analyse SCA avec Trivy...'
         script {
           def scanResult = sh(script: 'trivy fs . --scanners vuln --format json --output trivy_report.json', returnStdout: true)
-          def jsonResponse = readJSON text: scanResult
+          def jsonResponse = readJSON text: scanResult // Lire la sortie de Trivy
           def criticalVulns = jsonResponse.findAll { it.Vulnerability.Severity == 'CRITICAL' }
 
           if (criticalVulns.size() > 0) {
