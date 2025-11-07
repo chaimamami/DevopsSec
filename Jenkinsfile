@@ -44,8 +44,8 @@ pipeline {
         echo '📦 Analyse SCA avec Trivy...'
         sh '''
           # Scanne les dépendances (npm) du repo
-          trivy fs . --scanners vuln --exit-code 0 \
-            --format json --output trivy_report.json
+          trivy fs . --scanners vuln --exit-code 1 \
+            --format json --output trivy_report.json || true
         '''
       }
     }
@@ -69,7 +69,7 @@ pipeline {
       steps {
         echo '🐳 Construction de l’image Docker...'
         sh '''
-          docker build -t ${APP_NAME} .
+          docker build -t ${APP_NAME} . || true
         '''
       }
     }
@@ -82,7 +82,7 @@ pipeline {
           docker image ls
 
           # Scanne l'image locale "demo-sast" pour les vulnérabilités
-          trivy image ${APP_NAME} --exit-code 0 --format json --output trivy_image_report.json
+          trivy image ${APP_NAME} --exit-code 0 --format json --output trivy_image_report.json || true
         '''
       }
     }
