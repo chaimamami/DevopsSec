@@ -2,14 +2,16 @@ pipeline {
   agent any
 
   environment {
-    APP_NAME = 'demo-sast'
-    HOST_PORT = '8081'          // Changez si nécessaire
-    APP_PORT  = '3000'          // Port interne de l'application
+    APP_NAME   = 'demo-sast'
+    HOST_PORT  = '8081'
+    APP_PORT   = '3000'
     SEMGREP_IMG = 'returntocorp/semgrep:latest'
     GITLEAKS_IMG = 'zricethezav/gitleaks:latest'
+    PYTHON_ENV = '/usr/bin/python3'   // chemin Python
   }
 
   stages {
+
     stage('Build') {
       steps {
         echo '🔨 Compilation du projet...'
@@ -28,11 +30,8 @@ pipeline {
       steps {
         echo '🔍 Analyse du code source (SAST)...'
         sh '''
-          # ESLint (local au projet)
           npm install
-          npx eslint . || true
-
-          # Semgrep via container (pas besoin d’être installé sur Jenkins)
+          npx eslint . -f json -o eslint_report.json || true
           docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} \
             semgrep --config auto --json > semgrep_report.json || true
         '''
@@ -43,8 +42,7 @@ pipeline {
       steps {
         echo '📦 Analyse SCA avec Trivy...'
         sh '''
-          # Scanne les dépendances (npm) du repo
-          trivy fs . --scanners vuln --exit-code 1 \
+          trivy fs . --scanners vuln --exit-code 0 \
             --format json --output trivy_report.json || true
         '''
       }
@@ -54,7 +52,6 @@ pipeline {
       steps {
         echo '🕵️ Scan des secrets avec Gitleaks...'
         sh '''
-          # Gitleaks via container, ignore son propre rapport et node_modules
           docker run --rm -v "$PWD:/repo" ${GITLEAKS_IMG} detect \
             --no-git --source /repo \
             --exclude gitleaks_report.json \
@@ -78,10 +75,7 @@ pipeline {
       steps {
         echo '🔎 Scan de sécurité de l’image Docker...'
         sh '''
-          # Liste des images Docker
           docker image ls
-
-          # Scanne l'image locale "demo-sast" pour les vulnérabilités
           trivy image ${APP_NAME} --exit-code 0 --format json --output trivy_image_report.json || true
         '''
       }
@@ -91,15 +85,10 @@ pipeline {
       steps {
         echo "🚀 Déploiement du conteneur sur le port ${HOST_PORT}..."
         sh """
-          # Arrête/retire tout conteneur qui publie déjà ${HOST_PORT}
           docker ps -q --filter "publish=${HOST_PORT}" | xargs -r docker stop
           docker ps -q --filter "publish=${HOST_PORT}" | xargs -r docker rm
-
-          # Nettoie l'ancien conteneur s'il existe
           docker stop ${APP_NAME} || true
           docker rm ${APP_NAME} || true
-
-          # Lance la nouvelle version sur HOST:${HOST_PORT} -> CONTAINER:${APP_PORT}
           docker run -d --name ${APP_NAME} -p ${HOST_PORT}:${APP_PORT} ${APP_NAME}
         """
       }
@@ -115,13 +104,49 @@ pipeline {
         '''
       }
     }
+
+    stage('Exporter les métriques pour Prometheus') {
+      steps {
+        echo '📊 Export des métriques de sécurité vers Prometheus...'
+        sh '''
+          mkdir -p /var/lib/jenkins/metrics
+
+          # ESLint
+          echo "# ESLint Metrics" > /var/lib/jenkins/metrics/security_metrics.prom
+          echo "eslint_issues_total $(jq '.[] | map(.messages) | flatten | length' eslint_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+
+          # Semgrep
+          echo "# Semgrep Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
+          echo "semgrep_findings_total $(jq '.results | length' semgrep_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+
+          # Trivy (fichiers)
+          echo "# Trivy FS Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
+          echo "trivy_vulnerabilities_critical $(jq '[.Results[].Vulnerabilities[] | select(.Severity==\\"CRITICAL\\")] | length' trivy_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+          echo "trivy_vulnerabilities_high $(jq '[.Results[].Vulnerabilities[] | select(.Severity==\\"HIGH\\")] | length' trivy_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+
+          # Trivy (image Docker)
+          echo "# Trivy Image Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
+          echo "trivy_image_critical $(jq '[.Results[].Vulnerabilities[] | select(.Severity==\\"CRITICAL\\")] | length' trivy_image_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+        '''
+      }
+    }
   }
 
   post {
     always {
-      echo '📊 Fin du pipeline - génération/archivage des rapports.'
+      echo '📦 Archivage des rapports et envoi Slack...'
       sh 'ls -lh *.json zap_report.html || true'
       archiveArtifacts artifacts: '*.json, zap_report.html', onlyIfSuccessful: false
+
+      // ✅ Envoi automatique du rapport vers Slack
+      echo '📤 Envoi automatique de la notification Slack...'
+      sh '''
+        if [ -f send_slack_alert.py ]; then
+          ${PYTHON_ENV} send_slack_alert.py || echo "⚠️ Échec de l’envoi Slack"
+        else
+          echo "⚠️ Script Slack introuvable !"
+        fi
+      '''
     }
   }
 }

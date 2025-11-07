@@ -38,3 +38,5 @@ repos:
         entry: bash -c "trivy fs . --scanners vuln --exit-code 0 --format json --output trivy_report.json && echo '✅ Trivy scan complete'"
         language: system
         pass_filenames: false
+
+
