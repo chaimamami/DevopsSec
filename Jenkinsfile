@@ -36,17 +36,30 @@ pipeline {
           docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} \
             semgrep --config auto --json > semgrep_report.json || true
         '''
+        script {
+          def scanResult = sh(script: 'docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} semgrep --config auto --json', returnStdout: true)
+          def jsonResponse = readJSON text: scanResult
+          def criticalVulns = jsonResponse.findAll { it.findings.any { it.severity == 'critical' } }
+          
+          if (criticalVulns.size() > 0) {
+            error "Des vulnérabilités critiques ont été détectées par Semgrep !"
+          }
+        }
       }
     }
 
     stage('SCA - Analyse des dépendances avec Trivy') {
       steps {
         echo '📦 Analyse SCA avec Trivy...'
-        sh '''
-          # Scanne les dépendances (npm) du repo
-          trivy fs . --scanners vuln --exit-code 1 \
-            --format json --output trivy_report.json || true
-        '''
+        script {
+          def scanResult = sh(script: 'trivy fs . --scanners vuln --format json --output trivy_report.json', returnStdout: true)
+          def jsonResponse = readJSON text: scanResult
+          def criticalVulns = jsonResponse.findAll { it.Vulnerability.Severity == 'CRITICAL' }
+
+          if (criticalVulns.size() > 0) {
+            error "Des vulnérabilités critiques ont été détectées par Trivy !"
+          }
+        }
       }
     }
 
