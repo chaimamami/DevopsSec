@@ -4,7 +4,7 @@ pipeline {
   environment {
     APP_NAME = 'demo-sast'
     HOST_PORT = '8081'          // Changez si nécessaire
-    APP_PORT  = '3000'          // Port interne de l'application
+    APP_PORT = '3000'           // Port interne de l'application
     SEMGREP_IMG = 'returntocorp/semgrep:latest'
     GITLEAKS_IMG = 'zricethezav/gitleaks:latest'
   }
@@ -28,18 +28,18 @@ pipeline {
       steps {
         echo '🔍 Analyse du code source (SAST)...'
         sh '''
-          # ESLint (local au projet)
           npm install
           npx eslint . || true
-
-          # Semgrep via container (pas besoin d’être installé sur Jenkins)
-          docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} \
-            semgrep --config auto --json > semgrep_report.json || true
+          docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} semgrep --config auto --json > semgrep_report.json || true
         '''
         script {
-          def scanResult = readJSON file: 'semgrep_report.json' // Lire correctement le fichier JSON
-          def criticalVulns = scanResult.findAll { it.findings.any { it.severity == 'critical' } }
+          // Lire le fichier JSON généré
+          def scanResult = readJSON file: 'semgrep_report.json'
+
+          // Vérification des vulnérabilités critiques
+          def criticalVulns = scanResult.findings.findAll { it.severity == 'critical' }
           
+          // Si des vulnérabilités critiques sont trouvées, échouer le pipeline
           if (criticalVulns.size() > 0) {
             error "Des vulnérabilités critiques ont été détectées par Semgrep !"
           }
@@ -52,7 +52,9 @@ pipeline {
         echo '📦 Analyse SCA avec Trivy...'
         script {
           def scanResult = sh(script: 'trivy fs . --scanners vuln --format json --output trivy_report.json', returnStdout: true)
-          def jsonResponse = readJSON text: scanResult // Lire la sortie de Trivy
+          def jsonResponse = readJSON text: scanResult
+          
+          // Vérification des vulnérabilités critiques dans Trivy
           def criticalVulns = jsonResponse.findAll { it.Vulnerability.Severity == 'CRITICAL' }
 
           if (criticalVulns.size() > 0) {
@@ -66,7 +68,6 @@ pipeline {
       steps {
         echo '🕵️ Scan des secrets avec Gitleaks...'
         sh '''
-          # Gitleaks via container, ignore son propre rapport et node_modules
           docker run --rm -v "$PWD:/repo" ${GITLEAKS_IMG} detect \
             --no-git --source /repo \
             --exclude gitleaks_report.json \
@@ -90,10 +91,7 @@ pipeline {
       steps {
         echo '🔎 Scan de sécurité de l’image Docker...'
         sh '''
-          # Liste des images Docker
           docker image ls
-
-          # Scanne l'image locale "demo-sast" pour les vulnérabilités
           trivy image ${APP_NAME} --exit-code 0 --format json --output trivy_image_report.json || true
         '''
       }
@@ -103,15 +101,10 @@ pipeline {
       steps {
         echo "🚀 Déploiement du conteneur sur le port ${HOST_PORT}..."
         sh """
-          # Arrête/retire tout conteneur qui publie déjà ${HOST_PORT}
           docker ps -q --filter "publish=${HOST_PORT}" | xargs -r docker stop
           docker ps -q --filter "publish=${HOST_PORT}" | xargs -r docker rm
-
-          # Nettoie l'ancien conteneur s'il existe
           docker stop ${APP_NAME} || true
           docker rm ${APP_NAME} || true
-
-          # Lance la nouvelle version sur HOST:${HOST_PORT} -> CONTAINER:${APP_PORT}
           docker run -d --name ${APP_NAME} -p ${HOST_PORT}:${APP_PORT} ${APP_NAME}
         """
       }
