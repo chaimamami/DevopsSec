@@ -4,7 +4,7 @@ pipeline {
   environment {
     APP_NAME = 'demo-sast'
     HOST_PORT = '8081'          // Changez si nécessaire
-    APP_PORT = '3000'           // Port interne de l'application
+    APP_PORT  = '3000'          // Port interne de l'application
     SEMGREP_IMG = 'returntocorp/semgrep:latest'
     GITLEAKS_IMG = 'zricethezav/gitleaks:latest'
   }
@@ -27,60 +27,26 @@ pipeline {
     stage('SAST - ESLint + Semgrep') {
       steps {
         echo '🔍 Analyse du code source (SAST)...'
-        script {
-          // Exécuter ESLint
-          sh 'npm install'
-          sh 'npx eslint . || true'
+        sh '''
+          # ESLint (local au projet)
+          npm install
+          npx eslint . || true
 
-          // Lancer l'analyse Semgrep
-          sh '''
-            docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} semgrep --config auto --json > semgrep_report.json || true
-          '''
-
-          // Vérification de la présence du fichier Semgrep
-          def fileExists = fileExists 'semgrep_report.json'
-          if (fileExists) {
-            def scanResult = readJSON file: 'semgrep_report.json'
-            if (scanResult.results?.size() > 0) {
-              echo "Des vulnérabilités ont été trouvées dans Semgrep :"
-              scanResult.results.each {
-                echo "Vulnérabilité : ${it.path} - ${it.check_id}"
-              }
-            } else {
-              echo "Aucune vulnérabilité détectée dans Semgrep."
-            }
-          } else {
-            error "Le fichier semgrep_report.json n'a pas été généré !"
-          }
-        }
+          # Semgrep via container (pas besoin d’être installé sur Jenkins)
+          docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} \
+            semgrep --config auto --json > semgrep_report.json || true
+        '''
       }
     }
 
     stage('SCA - Analyse des dépendances avec Trivy') {
       steps {
         echo '📦 Analyse SCA avec Trivy...'
-        script {
-          // Exécuter Trivy pour analyser les dépendances
-          sh '''
-            trivy fs . --scanners vuln --format json --output trivy_report.json || true
-          '''
-          
-          // Vérification de la présence du fichier Trivy
-          def fileExists = fileExists 'trivy_report.json'
-          if (fileExists) {
-            def scanResult = readJSON file: 'trivy_report.json'
-            if (scanResult?.vulnerabilities?.size() > 0) {
-              echo "Des vulnérabilités ont été trouvées dans Trivy :"
-              scanResult.vulnerabilities.each {
-                echo "Vulnérabilité : ${it.VulnerabilityID} - ${it.Title}"
-              }
-            } else {
-              echo "Aucune vulnérabilité détectée dans Trivy."
-            }
-          } else {
-            error "Le fichier trivy_report.json n'a pas été généré !"
-          }
-        }
+        sh '''
+          # Scanne les dépendances (npm) du repo
+          trivy fs . --scanners vuln --exit-code 1 \
+            --format json --output trivy_report.json || true
+        '''
       }
     }
 
@@ -88,6 +54,7 @@ pipeline {
       steps {
         echo '🕵️ Scan des secrets avec Gitleaks...'
         sh '''
+          # Gitleaks via container, ignore son propre rapport et node_modules
           docker run --rm -v "$PWD:/repo" ${GITLEAKS_IMG} detect \
             --no-git --source /repo \
             --exclude gitleaks_report.json \
@@ -111,7 +78,10 @@ pipeline {
       steps {
         echo '🔎 Scan de sécurité de l’image Docker...'
         sh '''
+          # Liste des images Docker
           docker image ls
+
+          # Scanne l'image locale "demo-sast" pour les vulnérabilités
           trivy image ${APP_NAME} --exit-code 0 --format json --output trivy_image_report.json || true
         '''
       }
@@ -121,10 +91,15 @@ pipeline {
       steps {
         echo "🚀 Déploiement du conteneur sur le port ${HOST_PORT}..."
         sh """
+          # Arrête/retire tout conteneur qui publie déjà ${HOST_PORT}
           docker ps -q --filter "publish=${HOST_PORT}" | xargs -r docker stop
           docker ps -q --filter "publish=${HOST_PORT}" | xargs -r docker rm
+
+          # Nettoie l'ancien conteneur s'il existe
           docker stop ${APP_NAME} || true
           docker rm ${APP_NAME} || true
+
+          # Lance la nouvelle version sur HOST:${HOST_PORT} -> CONTAINER:${APP_PORT}
           docker run -d --name ${APP_NAME} -p ${HOST_PORT}:${APP_PORT} ${APP_NAME}
         """
       }
