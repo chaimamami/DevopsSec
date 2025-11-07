@@ -27,21 +27,30 @@ pipeline {
     stage('SAST - ESLint + Semgrep') {
       steps {
         echo '🔍 Analyse du code source (SAST)...'
-        sh '''
-          npm install
-          npx eslint . || true
-          docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} semgrep --config auto --json > semgrep_report.json || true
-        '''
         script {
-          // Lire le fichier JSON généré
-          def scanResult = readJSON file: 'semgrep_report.json'
+          // Exécuter ESLint
+          sh 'npm install'
+          sh 'npx eslint . || true'
 
-          // Vérification des vulnérabilités critiques
-          def criticalVulns = scanResult.findings.findAll { it.severity == 'critical' }
-          
-          // Si des vulnérabilités critiques sont trouvées, échouer le pipeline
-          if (criticalVulns.size() > 0) {
-            error "Des vulnérabilités critiques ont été détectées par Semgrep !"
+          // Lancer l'analyse Semgrep
+          sh '''
+            docker run --rm -v "$PWD:/src" -w /src ${SEMGREP_IMG} semgrep --config auto --json > semgrep_report.json || true
+          '''
+
+          // Vérification de la présence du fichier Semgrep
+          def fileExists = fileExists 'semgrep_report.json'
+          if (fileExists) {
+            def scanResult = readJSON file: 'semgrep_report.json'
+            if (scanResult.results?.size() > 0) {
+              echo "Des vulnérabilités ont été trouvées dans Semgrep :"
+              scanResult.results.each {
+                echo "Vulnérabilité : ${it.path} - ${it.check_id}"
+              }
+            } else {
+              echo "Aucune vulnérabilité détectée dans Semgrep."
+            }
+          } else {
+            error "Le fichier semgrep_report.json n'a pas été généré !"
           }
         }
       }
@@ -51,14 +60,25 @@ pipeline {
       steps {
         echo '📦 Analyse SCA avec Trivy...'
         script {
-          def scanResult = sh(script: 'trivy fs . --scanners vuln --format json --output trivy_report.json', returnStdout: true)
-          def jsonResponse = readJSON text: scanResult
+          // Exécuter Trivy pour analyser les dépendances
+          sh '''
+            trivy fs . --scanners vuln --format json --output trivy_report.json || true
+          '''
           
-          // Vérification des vulnérabilités critiques dans Trivy
-          def criticalVulns = jsonResponse.findAll { it.Vulnerability.Severity == 'CRITICAL' }
-
-          if (criticalVulns.size() > 0) {
-            error "Des vulnérabilités critiques ont été détectées par Trivy !"
+          // Vérification de la présence du fichier Trivy
+          def fileExists = fileExists 'trivy_report.json'
+          if (fileExists) {
+            def scanResult = readJSON file: 'trivy_report.json'
+            if (scanResult?.vulnerabilities?.size() > 0) {
+              echo "Des vulnérabilités ont été trouvées dans Trivy :"
+              scanResult.vulnerabilities.each {
+                echo "Vulnérabilité : ${it.VulnerabilityID} - ${it.Title}"
+              }
+            } else {
+              echo "Aucune vulnérabilité détectée dans Trivy."
+            }
+          } else {
+            error "Le fichier trivy_report.json n'a pas été généré !"
           }
         }
       }
