@@ -138,15 +138,17 @@ pipeline {
       sh 'ls -lh *.json zap_report.html || true'
       archiveArtifacts artifacts: '*.json, zap_report.html', onlyIfSuccessful: false
 
-      // ✅ Envoi automatique du rapport vers Slack
+      // ✅ Envoi automatique vers Slack avec credential sécurisé
       echo '📤 Envoi automatique de la notification Slack...'
-      sh '''
-        if [ -f send_slack_alert.py ]; then
-          ${PYTHON_ENV} send_slack_alert.py || echo "⚠️ Échec de l’envoi Slack"
-        else
-          echo "⚠️ Script Slack introuvable !"
-        fi
-      '''
+      withCredentials([string(credentialsId: 'SLACK_WEBHOOK_URL', variable: 'SLACK_WEBHOOK_URL')]) {
+        sh '''
+          if [ -f send_slack_alert.py ]; then
+            ${PYTHON_ENV} send_slack_alert.py || echo "⚠️ Échec de l’envoi Slack"
+          else
+            echo "⚠️ Script Slack introuvable !"
+          fi
+        '''
+      }
     }
   }
 }
