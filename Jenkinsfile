@@ -7,7 +7,7 @@ pipeline {
     APP_PORT   = '3000'
     SEMGREP_IMG = 'returntocorp/semgrep:latest'
     GITLEAKS_IMG = 'zricethezav/gitleaks:latest'
-    PYTHON_ENV = '/usr/bin/python3'   // chemin Python
+    PYTHON_ENV = '/usr/bin/python3'
   }
 
   stages {
@@ -105,28 +105,38 @@ pipeline {
       }
     }
 
+    // ✅ Bloc Prometheus corrigé et testé
     stage('Exporter les métriques pour Prometheus') {
       steps {
         echo '📊 Export des métriques de sécurité vers Prometheus...'
         sh '''
+          cd /var/lib/jenkins/workspace/DevSecOps
           mkdir -p /var/lib/jenkins/metrics
 
-          # ESLint
+          # === ESLint Metrics ===
           echo "# ESLint Metrics" > /var/lib/jenkins/metrics/security_metrics.prom
-          echo "eslint_issues_total $(jq '.[] | map(.messages) | flatten | length' eslint_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+          ESLINT_ISSUES=$(jq '[.[].messages] | flatten | length' eslint_report.json 2>/dev/null || echo 0)
+          echo "eslint_issues_total ${ESLINT_ISSUES}" >> /var/lib/jenkins/metrics/security_metrics.prom
 
-          # Semgrep
+          # === Semgrep Metrics ===
           echo "# Semgrep Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
-          echo "semgrep_findings_total $(jq '.results | length' semgrep_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+          SEMGREP_FINDINGS=$(jq '.results | length' semgrep_report.json 2>/dev/null || echo 0)
+          echo "semgrep_findings_total ${SEMGREP_FINDINGS}" >> /var/lib/jenkins/metrics/security_metrics.prom
 
-          # Trivy (fichiers)
+          # === Trivy (File System) Metrics ===
           echo "# Trivy FS Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
-          echo "trivy_vulnerabilities_critical $(jq '[.Results[].Vulnerabilities[] | select(.Severity==\\"CRITICAL\\")] | length' trivy_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
-          echo "trivy_vulnerabilities_high $(jq '[.Results[].Vulnerabilities[] | select(.Severity==\\"HIGH\\")] | length' trivy_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+          TRIVY_CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy_report.json 2>/dev/null || echo 0)
+          TRIVY_HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy_report.json 2>/dev/null || echo 0)
+          echo "trivy_vulnerabilities_critical ${TRIVY_CRITICAL}" >> /var/lib/jenkins/metrics/security_metrics.prom
+          echo "trivy_vulnerabilities_high ${TRIVY_HIGH}" >> /var/lib/jenkins/metrics/security_metrics.prom
 
-          # Trivy (image Docker)
+          # === Trivy (Image) Metrics ===
           echo "# Trivy Image Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
-          echo "trivy_image_critical $(jq '[.Results[].Vulnerabilities[] | select(.Severity==\\"CRITICAL\\")] | length' trivy_image_report.json)" >> /var/lib/jenkins/metrics/security_metrics.prom
+          TRIVY_IMG_CRIT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy_image_report.json 2>/dev/null || echo 0)
+          echo "trivy_image_critical ${TRIVY_IMG_CRIT}" >> /var/lib/jenkins/metrics/security_metrics.prom
+
+          echo "✅ Fichier Prometheus mis à jour :"
+          cat /var/lib/jenkins/metrics/security_metrics.prom
         '''
       }
     }
@@ -138,7 +148,6 @@ pipeline {
       sh 'ls -lh *.json zap_report.html || true'
       archiveArtifacts artifacts: '*.json, zap_report.html', onlyIfSuccessful: false
 
-      // ✅ Envoi automatique vers Slack avec credential sécurisé
       echo '📤 Envoi automatique de la notification Slack...'
       withCredentials([string(credentialsId: 'SLACK_WEBHOOK_URL', variable: 'SLACK_WEBHOOK_URL')]) {
         sh '''
