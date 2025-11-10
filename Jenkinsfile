@@ -8,6 +8,7 @@ pipeline {
     SEMGREP_IMG = 'returntocorp/semgrep:latest'
     GITLEAKS_IMG = 'zricethezav/gitleaks:latest'
     PYTHON_ENV = '/usr/bin/python3'
+    SONAR_HOST_URL = 'http://10.0.2.15:9000'
   }
 
   stages {
@@ -81,6 +82,24 @@ pipeline {
       }
     }
 
+    /* 🚀 NOUVELLE ÉTAPE AUTOMATIQUE SONARQUBE */
+    stage('Static Analysis - SonarQube') {
+      steps {
+        echo '📊 Analyse SonarQube automatique...'
+        withCredentials([string(credentialsId: 'SONAR_TOKEN_ID', variable: 'SONAR_TOKEN')]) {
+          sh '''
+            docker run --rm -v "$PWD":/usr/src -w /usr/src \
+              -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
+              sonarsource/sonar-scanner-cli:latest \
+              -Dsonar.projectKey=demo_sast \
+              -Dsonar.sources=. \
+              -Dsonar.host.url=${SONAR_HOST_URL} \
+              -Dsonar.login=${SONAR_TOKEN}
+          '''
+        }
+      }
+    }
+
     stage('Deploy') {
       steps {
         echo "🚀 Déploiement du conteneur sur le port ${HOST_PORT}..."
@@ -105,7 +124,6 @@ pipeline {
       }
     }
 
-    // ✅ Bloc Prometheus corrigé et testé
     stage('Exporter les métriques pour Prometheus') {
       steps {
         echo '📊 Export des métriques de sécurité vers Prometheus...'
@@ -113,24 +131,20 @@ pipeline {
           cd /var/lib/jenkins/workspace/DevSecOps
           mkdir -p /var/lib/jenkins/metrics
 
-          # === ESLint Metrics ===
           echo "# ESLint Metrics" > /var/lib/jenkins/metrics/security_metrics.prom
           ESLINT_ISSUES=$(jq '[.[].messages] | flatten | length' eslint_report.json 2>/dev/null || echo 0)
           echo "eslint_issues_total ${ESLINT_ISSUES}" >> /var/lib/jenkins/metrics/security_metrics.prom
 
-          # === Semgrep Metrics ===
           echo "# Semgrep Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
           SEMGREP_FINDINGS=$(jq '.results | length' semgrep_report.json 2>/dev/null || echo 0)
           echo "semgrep_findings_total ${SEMGREP_FINDINGS}" >> /var/lib/jenkins/metrics/security_metrics.prom
 
-          # === Trivy (File System) Metrics ===
           echo "# Trivy FS Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
           TRIVY_CRITICAL=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy_report.json 2>/dev/null || echo 0)
           TRIVY_HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy_report.json 2>/dev/null || echo 0)
           echo "trivy_vulnerabilities_critical ${TRIVY_CRITICAL}" >> /var/lib/jenkins/metrics/security_metrics.prom
           echo "trivy_vulnerabilities_high ${TRIVY_HIGH}" >> /var/lib/jenkins/metrics/security_metrics.prom
 
-          # === Trivy (Image) Metrics ===
           echo "# Trivy Image Metrics" >> /var/lib/jenkins/metrics/security_metrics.prom
           TRIVY_IMG_CRIT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy_image_report.json 2>/dev/null || echo 0)
           echo "trivy_image_critical ${TRIVY_IMG_CRIT}" >> /var/lib/jenkins/metrics/security_metrics.prom
