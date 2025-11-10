@@ -1,5 +1,4 @@
 {
-  "type": "module",
   "name": "demo_sast",
   "version": "1.0.0",
   "main": "test.js",
