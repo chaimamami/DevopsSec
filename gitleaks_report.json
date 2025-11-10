@@ -1,1 +1,22 @@
-[]
+[
+ {
+  "Description": "Detected a Generic API Key, potentially exposing access to various services and sensitive operations.",
+  "StartLine": 9,
+  "EndLine": 9,
+  "StartColumn": 5,
+  "EndColumn": 31,
+  "Match": "Secret\": \"1234567890abcdef\"",
+  "Secret": "1234567890abcdef",
+  "File": "gitleaks_report.json",
+  "SymlinkFile": "",
+  "Commit": "4805dd64903608d702fad1d90cde27240641f6f8",
+  "Entropy": 4,
+  "Author": "Chaima Mami",
+  "Email": "chaima.mami@esprit.tn",
+  "Date": "2025-11-06T17:21:51Z",
+  "Message": "Fix lint + ignore false positive secrets",
+  "Tags": [],
+  "RuleID": "generic-api-key",
+  "Fingerprint": "4805dd64903608d702fad1d90cde27240641f6f8:gitleaks_report.json:generic-api-key:9"
+ }
+]
