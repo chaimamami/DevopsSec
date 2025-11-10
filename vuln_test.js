@@ -1,8 +1,13 @@
-// Exemple de code vulnérable pour ESLint
-let password = "123456";  // hardcoded secret
-eval("console.log('XSS!')");  // utilisation dangereuse d'eval
+const express = require('express');
+const app = express();
+const PORT = 3000;
 
-function login(user) {
-    console.log("User logged in: " + user); // problème de log d'informations sensibles
-}
-login("admin");
+// Route principale
+app.get('/', (req, res) => {
+  res.send('✅ Application demo-sast en marche !');
+});
+
+// Lancer le serveur
+app.listen(PORT, () => {
+  console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+});

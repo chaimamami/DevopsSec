@@ -23,4 +23,4 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
 # Démarrer l’application
-CMD ["npm", "start"]
+CMD ["node", "vuln_test.js"]
