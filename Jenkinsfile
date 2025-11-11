@@ -53,10 +53,9 @@ pipeline {
       steps {
         echo '🕵️ Scan des secrets avec Gitleaks...'
         sh '''
+          # ✅ Correction : suppression du flag --exclude (obsolète)
           docker run --rm -v "$PWD:/repo" ${GITLEAKS_IMG} detect \
             --no-git --source /repo \
-            --exclude gitleaks_report.json \
-            --exclude node_modules \
             --report-path /repo/gitleaks_report.json \
             --verbose || true
         '''
@@ -82,7 +81,6 @@ pipeline {
       }
     }
 
-    /* 🚀 NOUVELLE ÉTAPE AUTOMATIQUE SONARQUBE */
     stage('Static Analysis - SonarQube') {
       steps {
         echo '📊 Analyse SonarQube automatique...'
@@ -117,6 +115,9 @@ pipeline {
       steps {
         echo '🧪 Scan dynamique de l’application (DAST)...'
         sh '''
+          # ✅ Attente pour éviter "Connection refused"
+          echo "⏳ Attente du démarrage complet de l’application..."
+          sleep 15
           docker run --rm -v $(pwd):/zap/wrk/:rw -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
             -t http://localhost:${HOST_PORT} \
             -r zap_report.html || true
